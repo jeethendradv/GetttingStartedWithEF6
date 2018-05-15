@@ -1,0 +1,232 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Data.Entity;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Net;
+using System.Web;
+using System.Web.Mvc;
+using GetttingStartedWithEF6.DAL;
+using GetttingStartedWithEF6.Models;
+using System.Data.Entity.Infrastructure;
+
+namespace GetttingStartedWithEF6.Controllers
+{
+    public class DepartmentController : Controller
+    {
+        private SchoolContext db = new SchoolContext();
+
+        // GET: Departments
+        public async Task<ActionResult> Index()
+        {
+            var departments = db.Departments.Include(d => d.Administrator);
+            return View(await departments.ToListAsync());
+        }
+
+        // GET: Departments/Details/5
+        public async Task<ActionResult> Details(int? id)
+        {
+            if (id == null)
+            {
+                return new HttpStatusCodeResult(HttpStatusCode.BadRequest);
+            }
+            //Department department = await db.Departments.FindAsync(id);
+            string query = "select * from Department where DepartmentID  = @p0";
+            Department department = await db.Departments.SqlQuery(query, id.Value).SingleOrDefaultAsync();
+            if (department == null)
+            {
+                return HttpNotFound();
+            }
+            return View(department);
+        }
+
+        // GET: Departments/Create
+        public ActionResult Create()
+        {
+            ViewBag.InstructorID = new SelectList(db.Instructors, "Id", "FullName");
+            return View();
+        }
+
+        // POST: Departments/Create
+        // To protect from overposting attacks, please enable the specific properties you want to bind to, for 
+        // more details see https://go.microsoft.com/fwlink/?LinkId=317598.
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<ActionResult> Create([Bind(Include = "DepartmentID,Name,Budget,StartDate,InstructorID")] Department department)
+        {
+            if (ModelState.IsValid)
+            {
+                db.Departments.Add(department);
+                await db.SaveChangesAsync();
+                return RedirectToAction("Index");
+            }
+
+            ViewBag.InstructorID = new SelectList(db.Instructors, "Id", "FullName", department.InstructorID);
+            return View(department);
+        }
+
+        // GET: Departments/Edit/5
+        public async Task<ActionResult> Edit(int? id)
+        {
+            if (id == null)
+            {
+                return new HttpStatusCodeResult(HttpStatusCode.BadRequest);
+            }
+            Department department = await db.Departments.FindAsync(id);
+            if (department == null)
+            {
+                return HttpNotFound();
+            }
+            ViewBag.InstructorID = new SelectList(db.Instructors, "Id", "FullName", department.InstructorID);
+            return View(department);
+        }
+
+        // POST: Departments/Edit/5
+        // To protect from overposting attacks, please enable the specific properties you want to bind to, for 
+        // more details see https://go.microsoft.com/fwlink/?LinkId=317598.
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<ActionResult> Edit(
+        [Bind(Include = "DepartmentID, Name, Budget, StartDate, RowVersion, InstructorID")]
+        Department department)
+        {
+            try
+            {
+                if (ModelState.IsValid)
+                {
+                    ValidateOneAdministratorAssignmentPerInstructor(department);
+                    db.Entry(department).State = EntityState.Modified;
+                    await db.SaveChangesAsync();
+                    return RedirectToAction("Index");
+                }
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                var entry = ex.Entries.Single();
+                var clientValues = (Department)entry.Entity;
+                var databaseEntry = entry.GetDatabaseValues();
+
+                if (databaseEntry == null)
+                {
+                    ModelState.AddModelError(string.Empty,
+                    "Unable to save changes. The department was deleted by another user.");
+                }
+                else
+                {
+                    var databaseValues = (Department)databaseEntry.ToObject();
+                    if (databaseValues.Name != clientValues.Name)
+                        ModelState.AddModelError("Name", "Current value: "
+                        + databaseValues.Name);
+                    if (databaseValues.Budget != clientValues.Budget)
+                        ModelState.AddModelError("Budget", "Current value: "
+                        + String.Format("{0:c}", databaseValues.Budget));
+                    if (databaseValues.StartDate != clientValues.StartDate)
+                        ModelState.AddModelError("StartDate", "Current value: "
+                        + String.Format("{0:d}", databaseValues.StartDate));
+                    if (databaseValues.InstructorID != clientValues.InstructorID)
+                        ModelState.AddModelError("InstructorID", "Current value: "
+                        + db.Instructors.Find(databaseValues.InstructorID).FullName);
+                    ModelState.AddModelError(string.Empty, "The record you attempted to edit "
+                    + "was modified by another user after you got the original value. The "
+                    + "edit operation was canceled and the current values in the database "
+                    + "have been displayed. If you still want to edit this record, click "
+                    + "the Save button again. Otherwise click the Back to List hyperlink.");
+                    department.RowVersion = databaseValues.RowVersion;
+                }
+            }
+            catch (RetryLimitExceededException /* dex */)
+            {
+                //Log the error (uncomment dex variable name and add a line here to write a log.
+                ModelState.AddModelError(string.Empty, "Unable to save changes. Try again, and if the problem persists contact your system administrator.");
+            }
+            ViewBag.InstructorID = new SelectList(db.Instructors, "ID", "FullName", department.InstructorID);
+            return View(department);
+        }
+
+        // GET: Departments/Delete/5
+        public ActionResult Delete(int? id, bool? concurrencyError)
+        {
+            if (id == null)
+            {
+                return new HttpStatusCodeResult(HttpStatusCode.BadRequest);
+            }
+            Department department = db.Departments.Find(id);
+            if (department == null)
+            {
+                return HttpNotFound();
+            }
+            if (concurrencyError.GetValueOrDefault())
+            {
+                if (department == null)
+                {
+                    ViewBag.ConcurrencyErrorMessage = "The record you attempted to delete "
+                    + "was deleted by another user after you got the original values. "
+                    + "Click the Back to List hyperlink.";
+                }
+                else
+                {
+                    ViewBag.ConcurrencyErrorMessage = "The record you attempted to delete "
+                    + "was modified by another user after you got the original values. "
+                    + "The delete operation was canceled and the current values in the "
+                    + "database have been displayed. If you still want to delete this "
+                    + "record, click the Delete button again. Otherwise "
+                    + "click the Back to List hyperlink.";
+                }
+            }
+            return View(department);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public ActionResult Delete(Department department)
+        {
+            try
+            {
+                db.Entry(department).State = EntityState.Deleted;
+                db.SaveChanges();
+                return RedirectToAction("Index");                
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return RedirectToAction("Delete", new { concurrencyError = true });
+            }
+            catch (DataException /* dex */)
+            {
+                //Log the error (uncomment dex variable name after DataException and add a line here to write a log.
+                ModelState.AddModelError(string.Empty, "Unable to delete. Try again, and if the problem persists contact your system administrator.");
+                return View(department);
+            }
+        }
+
+        private void ValidateOneAdministratorAssignmentPerInstructor(Department department)
+        {
+            if (department.InstructorID != null)
+            {
+                Department duplicateDepartment = db.Departments
+                .Include("Administrator")
+                .Where(d => d.InstructorID == department.InstructorID)
+                .AsNoTracking()
+                .FirstOrDefault();
+                if (duplicateDepartment != null && duplicateDepartment.DepartmentID != department.DepartmentID)
+                {
+                    string errorMessage = String.Format(
+                    "Instructor {0} {1} is already administrator of the {2} department.",
+                    duplicateDepartment.Administrator.FirstName,
+                    duplicateDepartment.Administrator.LastName,
+                    duplicateDepartment.Name);
+                    ModelState.AddModelError(string.Empty, errorMessage);
+                }
+            }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                db.Dispose();
+            }
+            base.Dispose(disposing);
+        }
+    }
+}

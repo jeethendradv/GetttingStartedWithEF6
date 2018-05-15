@@ -1,0 +1,26 @@
+﻿@model List<GetttingStartedWithEF6.ViewModels.EnrollmentDateGroup>
+@{
+    ViewBag.Title = "Student body statistics";
+}
+<h2>Student Body Statistics</h2>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>
+                Enrollment Date
+            </th>
+            <th>
+                Number of students enrolled
+            </th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var enrollmentdata in Model)
+        {
+            <tr>
+                <td>@Html.DisplayFor(x => enrollmentdata.EnrollmentDate)</td>
+                <td>@enrollmentdata.StudentCount</td>
+            </tr>
+        }
+    </tbody>
+</table>
